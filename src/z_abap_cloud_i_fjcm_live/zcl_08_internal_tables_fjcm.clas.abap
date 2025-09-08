@@ -140,7 +140,7 @@ class zcl_08_internal_tables_fjcm implementation.
 *    add_multiple_lines( out ).
 *
 *    Sort records
-    sort_records( out ).
+*    sort_records( out ).
 *
 *    Modify records
 *    modify_records( out ).
@@ -152,13 +152,13 @@ class zcl_08_internal_tables_fjcm implementation.
 *    clear_free_memory( out ).
 *
 *    Collect statement
-*    collect_records( out ).
+     collect_records( out ).
 *
 *    Let instruction
-*    use_let( out ).
+*     use_let( out ).
 
 *    Base instruction
-*    use_base( out ).
+*     use_base( out ).
 *
 *    Grouping of records
 *    group_records( out ).
@@ -309,13 +309,15 @@ class zcl_08_internal_tables_fjcm implementation.
 
   method clear_free_memory.
 
-    select * from /dmo/connection where carrier_id = 'SQ' into table @mt_airlines.
-
-    clear mt_airlines.
+  "Clean the table but keeps the memory allocated
 
     select * from /dmo/connection where carrier_id = 'SQ' into table @mt_airlines.
 
-    free mt_airlines.
+    clear mt_airlines.  "CLEAR for variables and structures
+
+    select * from /dmo/connection where carrier_id = 'SQ' into table @mt_airlines.
+
+    free mt_airlines.  "FREE for itabs
 
   endmethod.
 
@@ -330,10 +332,15 @@ class zcl_08_internal_tables_fjcm implementation.
       where seats_max eq '140'
       into table @lt_seats.
 
+      ir_out->write( data = lt_seats name = 'lt_seats' ).
+
     select carrier_id, connection_id, seats_occupied as seats, price as bookings
       from /dmo/flight
       into table @lt_seats_2.
 
+      ir_out->write( data = lt_seats_2 name = 'lt_seats_2' ).
+
+" Merging both itabs with collect to eliminate duplicates * Merge prices and seats occupied for same flight
     loop at lt_seats_2 into data(ls_seat).
       collect ls_seat into lt_seats.
     endloop.
@@ -378,7 +385,7 @@ class zcl_08_internal_tables_fjcm implementation.
 
     ir_out->write( data = mt_spfli name = 'Before Delete' ).
 
-    delete mt_spfli where airport_to_id = 'FRA'.
+    delete mt_spfli where airport_to_id = 'FRA'. " Also index from 2 to 5       KEY OR INDEX
     ir_out->write( data = mt_spfli name = 'Delete Records' ).
 
   endmethod.
@@ -424,32 +431,33 @@ class zcl_08_internal_tables_fjcm implementation.
 *        WHERE carrier_id EQ 'LH'
         into table @mt_spfli.
 
-*    Grouping of records
-*    LOOP AT mt_spfli ASSIGNING <ls_spfli>
-*        GROUP BY <ls_spfli>-airport_from_id.
+**    Grouping of records
+*    LOOP AT mt_spfli ASSIGNING <ls_spfli>    " Field symbol
+*        GROUP BY <ls_spfli>-airport_from_id. " Grouping by airport_from_id column of groups
 *      CLEAR lt_members.
 *      LOOP AT GROUP <ls_spfli> INTO DATA(ls_member).
-*        lt_members = VALUE #( BASE lt_members ( ls_member ) ).
+*        lt_members = VALUE #( BASE lt_members ( ls_member ) ). "All in ls_member goes to lt_members
 *      ENDLOOP.
 *      ir_out->write( data = lt_members name = 'lt_members' ).
 *    ENDLOOP.
 *    UNASSIGN <ls_spfli>.
 
-*    Grouping by key
+**    Grouping by key
 *    LOOP AT mt_spfli ASSIGNING <ls_spfli>
 *      "Grouping by more than one column of groups
-*      GROUP BY ( airportfrom = <ls_spfli>-airport_from_id
-*                 airportto   = <ls_spfli>-airport_to_id   ) INTO DATA(gs_key).
+*      GROUP BY ( airportfrom = <ls_spfli>-airport_from_id  " 2 keys to group
+*                 airportto   = <ls_spfli>-airport_to_id   ) INTO DATA(gs_key). " gs_key is a structure gonna be used like a key
 *      CLEAR lt_members.
 *      LOOP AT GROUP gs_key INTO DATA(gs_member).
-*        lt_members = VALUE #( BASE lt_members ( gs_member ) ).
+*        lt_members = VALUE #( BASE lt_members ( gs_member ) ). "All in gs_member goes to lt_members
 *      ENDLOOP.
 *      ir_out->write( data = lt_members name = 'lt_members' ).
 *      ir_out->write( data = gs_key name = 'gs_key' ).
 *    ENDLOOP.
 
+" Better practice = Grouping of records
 *   FOR GROUPS
-    ir_out->write(  value lty_group_keys( for groups gv_group of gs_group in mt_spfli
+    ir_out->write(  value lty_group_keys( for groups gv_group of gs_group in mt_spfli  "FOR groups variables in memory to group the itab
                                           group by gs_group-carrier_id
                                           ascending
                                           without members ( gv_group )  )  ).
@@ -500,8 +508,8 @@ class zcl_08_internal_tables_fjcm implementation.
 
     loop at mt_spfli into data(ls_spfli).
       if ls_spfli-departure_time gt '12:00:00'.
-        ls_spfli-departure_time = cl_abap_context_info=>get_system_time(  ).
-        modify mt_spfli from ls_spfli transporting departure_time.
+        ls_spfli-departure_time = cl_abap_context_info=>get_system_time(  ). " CHANGE TO CURRENT TIME
+        modify mt_spfli from ls_spfli transporting departure_time. " Transporting* Affects only the field departure_time
       endif.
     endloop.
     ir_out->write( data = mt_spfli name = 'Modify table' ).
@@ -571,6 +579,9 @@ class zcl_08_internal_tables_fjcm implementation.
 
     ir_out->write( mt_flights_type ).
 
+    "Its like a append but faster, it creates a new itab based on another itab. Use base to create a new itab based on another itab
+    " mt_flights_type is the base for lt_flights_base plus the new records added
+
     lt_flights_base = value #( base mt_flights_type ( carrier_id    = 'DL'
                                                       connection_id    = '2500'
                                                       flight_date    = cl_abap_context_info=>get_system_date( )
@@ -597,6 +608,7 @@ class zcl_08_internal_tables_fjcm implementation.
 
     data: lv_currency type mty_currency.
 
+
     lv_currency = c_dollar.
     ir_out->write( |Currency Code: { lv_currency }| ).
 
@@ -616,6 +628,7 @@ class zcl_08_internal_tables_fjcm implementation.
     select * from /dmo/flight into table @mt_flights_type.
     select * from /dmo/carrier into table @mt_scarr.
 
+" Assigning values to variables in *memory* with LET . Similar like FOR
     loop at mt_flights_type into data(ls_flight_let).
       data(lv_flights) = conv string( let lv_airline_name = mt_scarr[ carrier_id = ls_flight_let-carrier_id ]-name
                                           lv_flight_price = mt_flights_type[ carrier_id = ls_flight_let-carrier_id
@@ -633,8 +646,11 @@ class zcl_08_internal_tables_fjcm implementation.
 
     types lty_price type range of /dmo/flight-price.
 
-    data(lt_range) = value lty_price(  ( sign   = 'I' "E
-                                         option = 'BT' "EQ
+    " Its like parameters to filter data
+    "     sign = 'I': selects records between 200 and 400 (including 200 and 400).
+    "     sign = 'E': selects records not between 200 and 400 (excluding 200 to 400).
+    data(lt_range) = value lty_price(  ( sign   = 'E' "E       *Include or Exclude*
+                                         option = 'BT' "EQ     *Between or Equal*
                                          low    = '200'
                                          high   = '400'  )  ).
 
